@@ -1,7 +1,8 @@
 import os
 import shutil
 import traceback
-from src.bamm.common import config, parsing
+
+from . import config, parsing
 
 template_tree = None
 
@@ -9,7 +10,7 @@ userlog = config.userlog
 modderslog = config.modderslog
 
 
-# TODO overhaul.
+# TODO:  overhaul this function
 def load_all_templates(templatefile):
     """ Loads config information from templatefile.
 
@@ -73,8 +74,9 @@ def _apply_graphics_to_file(graphics_to_apply, file, sourceroot, targetpath):
     userlog.info("Merging graphics into %s ...", file)
     curr_dict = graphics_to_apply[file]
     curr_node = None
-    targetfile = open(targetpath, 'wt', encoding='cp437')
-    sourcefile = open(os.path.join(sourceroot, file), 'rt', encoding='cp437')
+    with open(os.path.join(sourceroot, file), 'rt', encoding='cp437') as f:
+        sourcefile = f.readlines()
+    outlines = []
     linecount = 0
     tags_to_reset_addl = []
     for line in sourcefile:
@@ -109,24 +111,26 @@ def _apply_graphics_to_file(graphics_to_apply, file, sourceroot, targetpath):
                 problem_parent = curr_node.find_targetsonly_owner(tag)
                 if ((problem_parent is not None and
                      problem_parent._targets_only[tag].has_graphics_info())):
-                    modderslog.info("Object missing graphics information in %s : %s",
-                                    targetpath, tag)
+                    modderslog.info(
+                        "Object missing graphics information in %s : %s",
+                        targetpath, tag)
                     # Targets without matching graphics
-                    modified_line = "No tag corresponding to (" + tag + \
-                        ") was found in graphics source. -BAMM\n" + modified_line
+                    modified_line = (
+                        "No tag corresponding to ({}) was found"
+                        " in graphics source. -BAMM\n{}").format(
+                            tag, modified_line)
 
-        targetfile.writelines(modified_line)
+        outlines.append(modified_line)
         for tag_node in additional:
             linecount = linecount + 1
             userlog.debug("Adding tag %s at line %i.", tag_node._tag,
                           linecount)
-            line_to_write = "[" + tag_node._tag + "]\n"
-            targetfile.writelines(line_to_write)
+            line_to_write = "[{}]\n".format(tag_node._tag)
+            outlines.append(line_to_write)
 
-    targetfile.flush()
+    with open(targetpath, 'wt', encoding='cp437') as f:
+        f.writelines(outlines)
     userlog.info("Finished outputting %s .", file)
-    targetfile.close()
-    sourcefile.close()
 # Resetting the additional tags for another
     for node in tags_to_reset_addl:
         node.reset_addl()
@@ -182,11 +186,10 @@ def write_modified_raws(graphics_to_apply, raws_sourcedir, outputdir):
                 targetpath = shutil.copyfile(os.path.join(root, file),
                                              targetpath)
                 userlog.info("%s copied.", file)
-            # TODO Need to implement graphics overwrites
-#             elif parsing.path_compatible(targetpath,
-#                                          properties[config.GRAPHICS_OVERWRITE_LIST][1:]
-#                                          ):
-#                 pass
+#            elif parsing.path_compatible(
+#                    targetpath,
+#                    properties[config.GRAPHICS_OVERWRITE_LIST][1:]):
+#                raise NotImplementedError('TODO - TwbT overrides')
             else:
                 _apply_graphics_to_file(graphics_to_apply, file, root,
                                         targetpath)
@@ -194,12 +197,11 @@ def write_modified_raws(graphics_to_apply, raws_sourcedir, outputdir):
     userlog.info("All files written.")
 
 
-# TODO implement
-# TODO docstring (when method is finished)
+# TODO implement/improve this function
 def find_graphics_overrides(graphics_directory, graphics_overwrites):
     to_return = []
     userlog.info("Locating graphics override files")
-    for root, dirs, files in os.walk(graphics_directory):
+    for root, _, files in os.walk(graphics_directory):
         for file in files:
             filepath = os.path.join(root, file)
             if parsing.path_compatible(filepath, graphics_overwrites):
@@ -222,27 +224,22 @@ class TreeNode():
         child's ._tag property.
     """
 
-    # TODO docstring
     def __init__(self, parent=None):
         self._parent = parent
         self._children = {}
         self._tag = None
 
-    # TODO docstring
     def add_child(self, child_node):
         self._children[child_node._tag] = child_node
 
-    # TODO docstring
     def find_match(self, tag):
         curr_node = self
         matching_node = None
-        out_of_parents = False
         while matching_node is None and curr_node is not None:
             matching_node = curr_node.get_child(tag)
             curr_node = curr_node._parent
         return matching_node
 
-    # TODO docstring
     def get_child(self, tag):
         if tag in self._children.keys():
             return self._children[tag]
@@ -250,7 +247,6 @@ class TreeNode():
             return None
 
 
-# TODO docstring
 class TemplateNode(TreeNode):
     """A TreeNode tailored for holding graphics templates.
 
@@ -333,11 +329,11 @@ class TemplateNode(TreeNode):
             parent.add_child(self)
 
     def is_standalone_tag(self):
-        """ Returns True if this is a tag without any non-graphical information."""
-        return ('$' not in self._tag
-                ) and '&' not in self._tag and self._is_graphics_tag
+        """Return True if this is a tag without non-graphical information."""
+        return all('$' not in self._tag,
+                   '&' not in self._tag,
+                   self._is_graphics_tag)
 
-    # TODO docstring
     def add_child(self, node):
         if node._tag in self._children.keys():
             return self._children[node._tag]
@@ -349,7 +345,6 @@ class TemplateNode(TreeNode):
             self._childref[first_token].append(node)
             return node
 
-    # TODO docstring
     def get_child(self, tag):
         if tag in self._children.keys():
             return self._children[tag]
@@ -366,7 +361,7 @@ class TemplateNode(TreeNode):
                 elif len(return_possibilities) == 0:
                     return None
                 else:
-                    # TODO error handling
+                    # TODO error handling for multiple matching child tags
                     userlog.debug("Found more than one matching child. \
                                   Matching children are:")
                     for poss in return_possibilities:
@@ -379,7 +374,6 @@ class TemplateNode(TreeNode):
 
     # This tells if a single tag matches a single tag; that is, it assumes
     # we've got one element of the |-separated list
-    # TODO docstring
     def get_template_match(self, tag_to_compare):
         if self._tag is None:
             return None
@@ -425,7 +419,7 @@ class TemplateNode(TreeNode):
                             # Replace it with (one of the possible lengths)
                             # times the multiplied symbol
                             # If jj is 0 the range item is just removed
-                            for kk in range(0, jj):
+                            for _ in range(0, jj):
                                 new_var.insert(ii, varii_type)
                             # Place the new variant in the token bag for
                             # evaluation
@@ -443,7 +437,7 @@ class TemplateNode(TreeNode):
         elif len(template_token_bag) == 1:
             return template_token_bag[0]
         else:
-            # TODO error handling
+            # TODO error handling for multiple template matches
             highest_priority = TemplateNode._get_best_match(template_token_bag)
             userlog.debug("More than one template matched.\nTag: %s Matches:",
                           tag_to_compare)
@@ -453,7 +447,6 @@ class TemplateNode(TreeNode):
             # Technically this does in fact have a matching template
             return highest_priority
 
-    # TODO docstring
     @staticmethod
     def _get_best_match(template_tokens_bag):
         if not template_tokens_bag:        # empty bag returns false
@@ -473,21 +466,17 @@ class TemplateNode(TreeNode):
                     best_tokens = challenger_tokens
             return best_currently
 
-    # TODO docstring
     def how_many_generations(self):
         temp_node = self
         count = -1
-        global template_tree
         while temp_node != template_tree:
             temp_node = temp_node._parent
             count = count + 1
         return count
 
 
-# TODO docstring
 class TagNode(TreeNode):
 
-    # TODO docstring
     def __init__(self, filename, template, tag, parent=None):
         TreeNode.__init__(self, parent)
         self._tag = tag
@@ -501,12 +490,10 @@ class TagNode(TreeNode):
         if parent is not None:
             parent.add_child(self)
 
-    # TODO docstring
     def add_child(self, child_tag_node):
         self._children[child_tag_node._tag] = child_tag_node
         self._pat_children[child_tag_node.get_pattern()] = child_tag_node
 
-    # TODO docstring
     def apply_graphics(self, graphics_node):
         if graphics_node is None:
             return None
@@ -514,7 +501,8 @@ class TagNode(TreeNode):
         graphics = graphics_node._tag.split(':')
         tag_template = self._template.get_template_match(self._tag)
         merged = []
-        graphics_template = self._template.get_template_match(graphics_node._tag)
+        graphics_template = self._template.get_template_match(
+            graphics_node._tag)
 
         for ii in range(0, len(tag_template)):
             if tag_template[ii] != graphics_template[ii]:
@@ -538,38 +526,34 @@ class TagNode(TreeNode):
 
         return ":".join(merged)
 
-    # TODO docstring
     def get_pattern(self):
         if self._pattern is None:
             to_return = self._tag.split(':')
             tag_tokens = self._tag.split(':')
-            template_possibilities = self._template.get_template_match(self._tag)
+            template_possibilities = \
+                self._template.get_template_match(self._tag)
             for ii in range(0, len(tag_tokens)):
                 if template_possibilities[ii] in [tag_tokens[ii], '$']:
                     to_return[ii] = tag_tokens[ii]
                 elif template_possibilities[ii] in ['?', '&']:
                     to_return[ii] = template_possibilities[ii]
                 else:
-                    userlog.error("Tag does not match its own template!! \
-                                  Tag: %s ; Template: %s",
+                    userlog.error("Tag does not match its own template!! " +\
+                                  "Tag: %s ; Template: %s",
                                   self._tag, self._template._tag)
             self._pattern = ":".join(to_return)
         return self._pattern
 
-    # TODO docstring
     def aligns_with(self, other_tag):
         return (self._template == other_tag._template
-                ) and self.get_pattern() == other_tag.get_pattern()
+                and self.get_pattern() == other_tag.get_pattern())
 
-    # TODO docstring
     def is_standalone_tag(self):
         return self._template.is_standalone_tag()
 
-    # TODO docstring
     def is_graphics_tag(self):
         return self._template._is_graphics_tag
 
-    # TODO docstring
     def has_graphics_info(self):
         to_return = self.is_graphics_tag()
         for child in self._children.keys():
@@ -601,14 +585,13 @@ class TagNode(TreeNode):
             node_collection = {}
 
         try:
-            for root, dirs, files in os.walk(directory):
+            for root, _, files in os.walk(directory):
                 for rawfile in files:
                     # Only look at .txt files
                     if '.txt' not in rawfile:
                         userlog.info("Skipping file %s...", rawfile)
                         continue
                     userlog.info("Loading graphics tags from %s...", rawfile)
-                    global template_tree
                     # curr_template_node keeps track of what format of tag
                     # we've most recently seen, and thus what's valid next
                     curr_template_node = template_tree
@@ -624,7 +607,8 @@ class TagNode(TreeNode):
                             if matching_node is not None:
                                 curr_template_node = matching_node
                                 if ((curr_real_node is None or
-                                     matching_node._tag in template_tree._children)):
+                                     matching_node._tag in
+                                     template_tree._children)):
                                     curr_real_node = TagNode(rawfile,
                                                              matching_node,
                                                              tag)
@@ -640,18 +624,18 @@ class TagNode(TreeNode):
                                 if rawfile not in node_collection:
                                     node_collection[rawfile] = {}
                                 if curr_real_node._parent is None:
-                                    node_collection[rawfile][tag] = curr_real_node
+                                    node_collection[rawfile][tag] = \
+                                        curr_real_node
 
                     openfile.close()
                     userlog.info("Finished processing %s .", rawfile)
-        except:
+        except Exception:
             userlog.error("Exception in loading raws.")
             userlog.error(traceback.format_exc())
         else:
             return node_collection
 
 
-# TODO docstring
 class BoundNode(TreeNode):
     def __init__(self, target_node, graphics_node, parent=None):
         TreeNode.__init__(self, parent)
@@ -667,73 +651,66 @@ class BoundNode(TreeNode):
         else:
             self.create_child_nodes()
 
-    # TODO docstring
     def add_child(self, child_node):
         self._children[child_node._target_node._tag] = child_node
         self._popped_children[child_node._target_node._tag] = False
 
-    # TODO docstring
     def is_graphics_tag(self):
-        if self._target_node.is_graphics_tag() != self._graphics_node.is_graphics_tag():
-            userlog.error("Problem in BoundNode.is_graphics_tag for BoundNode %s",
-                          self._tag)
+        if (self._target_node.is_graphics_tag() !=
+                self._graphics_node.is_graphics_tag()):
+            userlog.error(
+                "Problem in BoundNode.is_graphics_tag for BoundNode %s",
+                self._tag)
         return self._target_node.is_graphics_tag()
 
-    # TODO docstring
     def create_child_nodes(self):
         # Children with pattern keys in both target & graphics
-        for shared_key in set(self._target_node._pat_children.keys()
-                              ).intersection(set(self._graphics_node._pat_children.keys())):
+        tkeys = set(self._target_node._pat_children.keys())
+        gkeys = set(self._graphics_node._pat_children.keys())
+        for shared_key in tkeys & gkeys:
             new_node = BoundNode(self._target_node._pat_children[shared_key],
                                  self._graphics_node._pat_children[shared_key],
                                  self)
             self.add_child(new_node)
             new_node.create_child_nodes()
         # Children with pattern keys in target but not in graphics
-        for target_key in set(self._target_node._pat_children.keys()
-                              ) - set(self._graphics_node._pat_children.keys()):
+        for target_key in tkeys - gkeys:
             target_in_question = self._target_node._pat_children[target_key]
             if target_in_question.is_standalone_tag():
                 self.add_child(BoundNode(target_in_question, None, self))
             else:
                 self._targets_only[target_in_question._tag] = target_in_question
         # Children with pattern keys in graphics but not in target
-        for graphics_key in set(self._graphics_node._pat_children.keys()
-                                ) - set(self._target_node._pat_children.keys()):
-            graphics_in_question = self._graphics_node._pat_children[graphics_key]
+        for graphics_key in gkeys - tkeys:
+            graphics_in_question = \
+                self._graphics_node._pat_children[graphics_key]
             if graphics_in_question.is_standalone_tag():
                 self._additional.append(graphics_in_question)
-        # End
 
-    # TODO docstring
     def are_all_children_popped(self):
         to_return = True
         for child in self._popped_children.keys():
             to_return &= self._popped_children[child]
         return to_return
 
-    # TODO docstring
     def pop_addl(self):
         to_return = []
         # If this hasn't had its additionals popped and is ready to pop
-        if (not self._are_addl_popped):
+        if not self._are_addl_popped:
             self._are_addl_popped = True
             to_return.extend(self._additional)
         if self._parent is not None:
             to_return.extend(self._parent.pop_addl())
         return to_return
 
-    # TODO docstring
     def reset_addl(self):
         self._are_addl_popped = False
         for child in self._children.keys():
             self._children[child].reset_addl()
 
-    # TODO docstring
     def get_merged(self):
         return self._target_node.apply_graphics(self._graphics_node)
 
-    # TODO docstring
     def pop_child(self, target_tag):
         if target_tag not in self._children.keys():
             return self
@@ -744,7 +721,6 @@ class BoundNode(TreeNode):
 
             return self._children[target_tag]
 
-    # TODO docstring
     def pop_self(self):
         if self._parent is not None:
             also_self = self._parent.pop_child(self._tag)
@@ -753,23 +729,18 @@ class BoundNode(TreeNode):
                               parent's ._children[%s]", self._tag, self._tag)
         return self
 
-    # TODO docstring
     def is_there_a_difference(self):
         if self._graphics_node is None:
             return True
         elif self._target_node._tag == self._graphics_node._tag:
             return False
-        else:
-            return True
+        return True
 
-    # TODO docstring
     def find_targetsonly_owner(self, target_tag):
         if target_tag in self._targets_only:
             return self
         elif self._parent is not None:
             return self._parent.find_targetsonly_owner(target_tag)
-        else:
-            return None
 
     @staticmethod
     def bind_graphics_to_targets(graphics_nodes, targets_nodes):

@@ -31,19 +31,19 @@ IS_BOOL = 'bool'
 
 
 properties = {
-              TARGETDIR: [IS_DIR],
-              GRAPHICS_SOURCEDIR: [IS_DIR],
-              OUTPUTDIR: [IS_DIR],
-              GRAPHICS_OUTPUTDIR: [IS_DIR],
-              TEMPLATEFILE: [IS_FILE],
-              ASCII_FILE: [IS_FILE],
-              GRAPHICS_OVERWRITE_LIST: [IS_REGEX_LIST],
-              GRAPHICS_IGNORE_LIST: [IS_REGEX_LIST],
-              DEBUG: [IS_BOOL],
-              USERSLOG: [IS_FILE],
-              MODDERSLOG: [IS_FILE],
-              EXTRA_GRAPHICS_SOURCEDIR: [IS_DIR]
-              }
+    TARGETDIR: [IS_DIR],
+    GRAPHICS_SOURCEDIR: [IS_DIR],
+    OUTPUTDIR: [IS_DIR],
+    GRAPHICS_OUTPUTDIR: [IS_DIR],
+    TEMPLATEFILE: [IS_FILE],
+    ASCII_FILE: [IS_FILE],
+    GRAPHICS_OVERWRITE_LIST: [IS_REGEX_LIST],
+    GRAPHICS_IGNORE_LIST: [IS_REGEX_LIST],
+    DEBUG: [IS_BOOL],
+    USERSLOG: [IS_FILE],
+    MODDERSLOG: [IS_FILE],
+    EXTRA_GRAPHICS_SOURCEDIR: [IS_DIR]
+    }
 
 userlog = logging.getLogger(USERSLOG)
 modderslog = logging.getLogger(MODDERSLOG)
@@ -56,26 +56,22 @@ def load_run_config():
     Also initializes loggers if they haven't been already.
     """
     print("Loading run configuration...")
-    global runconfig
-    runconfig_file = open(runconfig, 'r')
-    global properties
+    with open(runconfig) as f:
+        runconfig_file = f.readlines()
     for line in runconfig_file:
         uncommented = line.strip().split('#')[0]
         props = uncommented.strip().split('=')
-        if len(props) == 0 or (len(props) == 1 and len(props[0]) == 0):
+        err_msg = ('Line "{}" in {} is improperly configured. '
+                   'Please format properties thus: "propertyname=value" '
+                   '(without quotes).').format(line, runconfig)
+        if not props or (len(props) == 1 and len(props[0]) == 0):
             continue
         elif len(props) != 2:
-            print('Line "', line, '" in ', runconfig,
-                  ' is improperly configured. Please format properties thus: \
-                  "propertyname=value" (without quotes).')
+            print(err_msg)
         elif not _property_has_format_error(props[0], props[1]):
             set_property(props[0], props[1])
         else:
-            print ('Line "', line, '" in', runconfig,
-                   'is improperly configured. Please format properties thus: \
-                   "propertyname=value" (without quotes).')
-
-    runconfig_file.close()
+            print(err_msg)
 
     initialize_logging()
     userlog.info("**********")
@@ -98,8 +94,7 @@ def initialize_logging():
 
     if _is_logging_initialized:
         return
-    else:
-        _is_logging_initialized = True
+    _is_logging_initialized = True
 
     # Logging
     fmt = logging.Formatter('%(message)s')
@@ -137,18 +132,17 @@ def _property_has_format_error(propkey, value):
 
     Otherwise, returns False.
     """
-    return (propkey not in properties.keys() or
-            (properties[propkey][0] == IS_DIR and
-                os.path.exists(value) and not os.path.isdir(value)) or
-            (properties[propkey][0] == IS_FILE and os.path.exists(value) and
-                not os.path.isfile(value)) or
-            (properties[propkey][0] == IS_BOOL and
-                value not in ('True', 'False')))
+    tests = (
+        propkey not in properties.keys(),
+        properties[propkey][0] == IS_DIR and os.path.isfile(value),
+        properties[propkey][0] == IS_FILE and os.path.isdir(value),
+        properties[propkey][0] == IS_BOOL and value not in {'True', 'False'},
+        )
+    return any(tests)
 
 
 def set_property(prop_id, value):
     """ Sets property prop_id to value. """
-    global properties
     if prop_id not in properties.keys():
         pass
     elif not _property_has_format_error(prop_id, value):

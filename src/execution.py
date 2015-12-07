@@ -4,8 +4,7 @@ Created on May 21, 2015
 @author: Button
 '''
 
-from src.bamm.common import config, parsing
-from src.bamm.graphics import graphics
+from . import config, graphics
 
 
 def default_run():
@@ -16,7 +15,6 @@ def default_run():
 
 def default_setup():
     config.load_run_config()
-    parsing._load_ascii_conversions(config.properties[config.ASCII_FILE][1])
     graphics.load_all_templates(config.properties[config.TEMPLATEFILE][1])
 
 
