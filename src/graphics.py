@@ -35,8 +35,8 @@ def load_all_templates(templatefile):
             if len(real_line) > 0:
                 tags = real_line.split('|')
                 for tag in tags:
-                    if tag in curr_node._children.keys():
-                        curr_node = curr_node._children[tag]
+                    if tag in curr_node.children.keys():
+                        curr_node = curr_node.children[tag]
                     else:
                         curr_node = TemplateNode(curr_node, tag)
 
@@ -123,9 +123,9 @@ def _apply_graphics_to_file(graphics_to_apply, file, sourceroot, targetpath):
         outlines.append(modified_line)
         for tag_node in additional:
             linecount = linecount + 1
-            userlog.debug("Adding tag %s at line %i.", tag_node._tag,
+            userlog.debug("Adding tag %s at line %i.", tag_node.tag,
                           linecount)
-            line_to_write = "[{}]\n".format(tag_node._tag)
+            line_to_write = "[{}]\n".format(tag_node.tag)
             outlines.append(line_to_write)
 
     with open(targetpath, 'wt', encoding='cp437') as f:
@@ -215,34 +215,34 @@ class TreeNode():
     Contains default implementations of common Tree functionality.
 
     Members:
-        * self._parent = the parent TreeNode of this TreeNode. Any given
+        * self.parent = the parent TreeNode of this TreeNode. Any given
         subclass of TreeNode should only have TreeNodes of its own type as
         _parent.
-        * self._tag = The string that this node represents. This should be
+        * self.tag = The string that this node represents. This should be
         overridden and re-defined by subclasses.
-        * self._children = A dict of type string:TreeNode, where the key is the
-        child's ._tag property.
+        * self.children = A dict of type string:TreeNode, where the key is the
+        child's .tag property.
     """
 
     def __init__(self, parent=None):
-        self._parent = parent
-        self._children = {}
-        self._tag = None
+        self.parent = parent
+        self.children = {}
+        self.tag = None
 
     def add_child(self, child_node):
-        self._children[child_node._tag] = child_node
+        self.children[child_node.tag] = child_node
 
     def find_match(self, tag):
         curr_node = self
         matching_node = None
         while matching_node is None and curr_node is not None:
             matching_node = curr_node.get_child(tag)
-            curr_node = curr_node._parent
+            curr_node = curr_node.parent
         return matching_node
 
     def get_child(self, tag):
-        if tag in self._children.keys():
-            return self._children[tag]
+        if tag in self.children.keys():
+            return self.children[tag]
         else:
             return None
 
@@ -282,7 +282,7 @@ class TemplateNode(TreeNode):
     information. The second value is optional - if omitted, it means there is
     no upper bound on how many tokens can be in this series.
     For examples, please see graphics_templates.config . The string between
-    each pipe ( | ) is a valid TemplateNode._tag .
+    each pipe ( | ) is a valid TemplateNode.tag .
     * _children is a dict containing the TemplateNodes representing the types
     of tags which are allowed to be children of the type of tag represented by
     this TemplateNode. The keys are the full _tags of the child TemplateNodes.
@@ -310,44 +310,44 @@ class TemplateNode(TreeNode):
         After creating itself, if the parent isn't None, it adds itself to its
         parent.
         """
-        TreeNode.__init__(self, parent)
+        super().__init__(self, parent)
         self._is_graphics_tag = False
         self._childref = {}
-        self._tag = None
+        self.tag = None
         global template_tree
         if parent is None:
-            self._parent = None
+            self.parent = None
             template_tree = self
         else:
             if template_tree is None:
-                self._parent = TemplateNode(None, "")
+                self.parent = TemplateNode(None, "")
             else:
-                self._parent = parent
+                self.parent = parent
 
-            self._tag = string
+            self.tag = string
 
             parent.add_child(self)
 
     def is_standalone_tag(self):
         """Return True if this is a tag without non-graphical information."""
-        return all('$' not in self._tag,
-                   '&' not in self._tag,
+        return all('$' not in self.tag,
+                   '&' not in self.tag,
                    self._is_graphics_tag)
 
     def add_child(self, node):
-        if node._tag in self._children.keys():
-            return self._children[node._tag]
+        if node.tag in self.children.keys():
+            return self.children[node.tag]
         else:
-            self._children[node._tag] = node
-            first_token = node._tag.split(':')[0]
+            self.children[node.tag] = node
+            first_token = node.tag.split(':')[0]
             if first_token not in self._childref.keys():
                 self._childref[first_token] = []
             self._childref[first_token].append(node)
             return node
 
     def get_child(self, tag):
-        if tag in self._children.keys():
-            return self._children[tag]
+        if tag in self.children.keys():
+            return self.children[tag]
         else:
             return_possibilities = []
             first_token = tag.split(':')[0]
@@ -375,10 +375,10 @@ class TemplateNode(TreeNode):
     # This tells if a single tag matches a single tag; that is, it assumes
     # we've got one element of the |-separated list
     def get_template_match(self, tag_to_compare):
-        if self._tag is None:
+        if self.tag is None:
             return None
         template_token_bag = []
-        template_token_bag.append(self._tag.split(':'))
+        template_token_bag.append(self.tag.split(':'))
         candidate_tokens = tag_to_compare.split(':')
 
         ii = 0
@@ -470,7 +470,7 @@ class TemplateNode(TreeNode):
         temp_node = self
         count = -1
         while temp_node != template_tree:
-            temp_node = temp_node._parent
+            temp_node = temp_node.parent
             count = count + 1
         return count
 
@@ -479,11 +479,11 @@ class TagNode(TreeNode):
 
     def __init__(self, filename, template, tag, parent=None):
         TreeNode.__init__(self, parent)
-        self._tag = tag
+        self.tag = tag
         self._filename = filename
-        self._template = template
-        self._children = {}
-        self._pat_children = {}
+        self.template = template
+        self.children = {}
+        self.pat_children = {}
         self._pattern = None
         self._pattern = self.get_pattern()
 
@@ -491,24 +491,24 @@ class TagNode(TreeNode):
             parent.add_child(self)
 
     def add_child(self, child_tag_node):
-        self._children[child_tag_node._tag] = child_tag_node
-        self._pat_children[child_tag_node.get_pattern()] = child_tag_node
+        self.children[child_tag_node.tag] = child_tag_node
+        self.pat_children[child_tag_node.get_pattern()] = child_tag_node
 
     def apply_graphics(self, graphics_node):
         if graphics_node is None:
             return None
-        tags = self._tag.split(':')
-        graphics = graphics_node._tag.split(':')
-        tag_template = self._template.get_template_match(self._tag)
+        tags = self.tag.split(':')
+        graphics = graphics_node.tag.split(':')
+        tag_template = self.template.get_template_match(self.tag)
         merged = []
-        graphics_template = self._template.get_template_match(
-            graphics_node._tag)
+        graphics_template = self.template.get_template_match(
+            graphics_node.tag)
 
         for ii in range(0, len(tag_template)):
             if tag_template[ii] != graphics_template[ii]:
                 userlog.error("Graphics cannot be applied from %s onto %s \
                               because their templates do not match.",
-                              graphics_node._tag, self._tag)
+                              graphics_node.tag, self.tag)
             elif tag_template[ii] != '&' and tag_template[ii] != '?':
                 if tags[ii] != graphics[ii]:
                     userlog.error("Tags are not compatible because token %i \
@@ -528,10 +528,10 @@ class TagNode(TreeNode):
 
     def get_pattern(self):
         if self._pattern is None:
-            to_return = self._tag.split(':')
-            tag_tokens = self._tag.split(':')
+            to_return = self.tag.split(':')
+            tag_tokens = self.tag.split(':')
             template_possibilities = \
-                self._template.get_template_match(self._tag)
+                self.template.get_template_match(self.tag)
             for ii in range(0, len(tag_tokens)):
                 if template_possibilities[ii] in [tag_tokens[ii], '$']:
                     to_return[ii] = tag_tokens[ii]
@@ -540,24 +540,24 @@ class TagNode(TreeNode):
                 else:
                     userlog.error("Tag does not match its own template!! " +\
                                   "Tag: %s ; Template: %s",
-                                  self._tag, self._template._tag)
+                                  self.tag, self.template.tag)
             self._pattern = ":".join(to_return)
         return self._pattern
 
     def aligns_with(self, other_tag):
-        return (self._template == other_tag._template
+        return (self.template == other_tag.template
                 and self.get_pattern() == other_tag.get_pattern())
 
     def is_standalone_tag(self):
-        return self._template.is_standalone_tag()
+        return self.template.is_standalone_tag()
 
     def is_graphics_tag(self):
-        return self._template._is_graphics_tag
+        return self.template._is_graphics_tag
 
     def has_graphics_info(self):
         to_return = self.is_graphics_tag()
-        for child in self._children.keys():
-            to_return |= self._children[child].has_graphics_info()
+        for child in self.children.keys():
+            to_return |= self.children[child].has_graphics_info()
             if to_return:
                 break
         return to_return
@@ -607,23 +607,23 @@ class TagNode(TreeNode):
                             if matching_node is not None:
                                 curr_template_node = matching_node
                                 if ((curr_real_node is None or
-                                     matching_node._tag in
-                                     template_tree._children)):
+                                     matching_node.tag in
+                                     template_tree.children)):
                                     curr_real_node = TagNode(rawfile,
                                                              matching_node,
                                                              tag)
                                 else:
                                     while (curr_real_node is not None and
-                                           matching_node._tag not in
-                                           curr_real_node._template._children):
-                                        curr_real_node = curr_real_node._parent
+                                           matching_node.tag not in
+                                           curr_real_node.template.children):
+                                        curr_real_node = curr_real_node.parent
                                     curr_real_node = TagNode(rawfile,
                                                              matching_node,
                                                              tag,
                                                              curr_real_node)
                                 if rawfile not in node_collection:
                                     node_collection[rawfile] = {}
-                                if curr_real_node._parent is None:
+                                if curr_real_node.parent is None:
                                     node_collection[rawfile][tag] = \
                                         curr_real_node
 
@@ -638,13 +638,13 @@ class TagNode(TreeNode):
 
 class BoundNode(TreeNode):
     def __init__(self, target_node, graphics_node, parent=None):
-        TreeNode.__init__(self, parent)
-        self._tag = target_node._tag
+        super().__init__(self, parent)
+        self.tag = target_node.tag
         self._popped_children = {}
         self._additional = []
         self._targets_only = {}
         self._are_addl_popped = False
-        self._target_node = target_node
+        self.target_node = target_node
         self._graphics_node = graphics_node
         if parent is not None:
             parent.add_child(self)
@@ -652,38 +652,38 @@ class BoundNode(TreeNode):
             self.create_child_nodes()
 
     def add_child(self, child_node):
-        self._children[child_node._target_node._tag] = child_node
-        self._popped_children[child_node._target_node._tag] = False
+        self.children[child_node.target_node.tag] = child_node
+        self._popped_children[child_node.target_node.tag] = False
 
     def is_graphics_tag(self):
-        if (self._target_node.is_graphics_tag() !=
+        if (self.target_node.is_graphics_tag() !=
                 self._graphics_node.is_graphics_tag()):
             userlog.error(
                 "Problem in BoundNode.is_graphics_tag for BoundNode %s",
-                self._tag)
-        return self._target_node.is_graphics_tag()
+                self.tag)
+        return self.target_node.is_graphics_tag()
 
     def create_child_nodes(self):
         # Children with pattern keys in both target & graphics
-        tkeys = set(self._target_node._pat_children.keys())
-        gkeys = set(self._graphics_node._pat_children.keys())
+        tkeys = set(self.target_node.pat_children.keys())
+        gkeys = set(self._graphics_node.pat_children.keys())
         for shared_key in tkeys & gkeys:
-            new_node = BoundNode(self._target_node._pat_children[shared_key],
-                                 self._graphics_node._pat_children[shared_key],
+            new_node = BoundNode(self.target_node.pat_children[shared_key],
+                                 self._graphics_node.pat_children[shared_key],
                                  self)
             self.add_child(new_node)
             new_node.create_child_nodes()
         # Children with pattern keys in target but not in graphics
         for target_key in tkeys - gkeys:
-            target_in_question = self._target_node._pat_children[target_key]
+            target_in_question = self.target_node.pat_children[target_key]
             if target_in_question.is_standalone_tag():
                 self.add_child(BoundNode(target_in_question, None, self))
             else:
-                self._targets_only[target_in_question._tag] = target_in_question
+                self._targets_only[target_in_question.tag] = target_in_question
         # Children with pattern keys in graphics but not in target
         for graphics_key in gkeys - tkeys:
             graphics_in_question = \
-                self._graphics_node._pat_children[graphics_key]
+                self._graphics_node.pat_children[graphics_key]
             if graphics_in_question.is_standalone_tag():
                 self._additional.append(graphics_in_question)
 
@@ -699,48 +699,48 @@ class BoundNode(TreeNode):
         if not self._are_addl_popped:
             self._are_addl_popped = True
             to_return.extend(self._additional)
-        if self._parent is not None:
-            to_return.extend(self._parent.pop_addl())
+        if self.parent is not None:
+            to_return.extend(self.parent.pop_addl())
         return to_return
 
     def reset_addl(self):
         self._are_addl_popped = False
-        for child in self._children.keys():
-            self._children[child].reset_addl()
+        for child in self.children.keys():
+            self.children[child].reset_addl()
 
     def get_merged(self):
-        return self._target_node.apply_graphics(self._graphics_node)
+        return self.target_node.apply_graphics(self._graphics_node)
 
     def pop_child(self, target_tag):
-        if target_tag not in self._children.keys():
+        if target_tag not in self.children.keys():
             return self
         else:
             if self._popped_children[target_tag]:
                 userlog.warning("Popping tag that has already been popped: %s \
-                                child of %s", target_tag, self._tag)
+                                child of %s", target_tag, self.tag)
 
-            return self._children[target_tag]
+            return self.children[target_tag]
 
     def pop_self(self):
-        if self._parent is not None:
-            also_self = self._parent.pop_child(self._tag)
+        if self.parent is not None:
+            also_self = self.parent.pop_child(self.tag)
             if also_self != self:
                 userlog.error("Big problem: Bound Node with _tag %s is not its \
-                              parent's ._children[%s]", self._tag, self._tag)
+                              parent's .children[%s]", self.tag, self.tag)
         return self
 
     def is_there_a_difference(self):
         if self._graphics_node is None:
             return True
-        elif self._target_node._tag == self._graphics_node._tag:
+        elif self.target_node.tag == self._graphics_node.tag:
             return False
         return True
 
     def find_targetsonly_owner(self, target_tag):
         if target_tag in self._targets_only:
             return self
-        elif self._parent is not None:
-            return self._parent.find_targetsonly_owner(target_tag)
+        elif self.parent is not None:
+            return self.parent.find_targetsonly_owner(target_tag)
 
     @staticmethod
     def bind_graphics_to_targets(graphics_nodes, targets_nodes):
