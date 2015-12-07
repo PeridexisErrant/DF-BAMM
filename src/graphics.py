@@ -80,7 +80,7 @@ def _apply_graphics_to_file(graphics_to_apply, file, sourceroot, targetpath):
     linecount = 0
     tags_to_reset_addl = []
     for line in sourcefile:
-        linecount = linecount + 1
+        linecount += 1
         modified_line = parsing.escape_problematic_literals(line)
         additional = []
         for tag in parsing.tags(line):
@@ -122,7 +122,7 @@ def _apply_graphics_to_file(graphics_to_apply, file, sourceroot, targetpath):
 
         outlines.append(modified_line)
         for tag_node in additional:
-            linecount = linecount + 1
+            linecount += 1
             userlog.debug("Adding tag %s at line %i.", tag_node.tag,
                           linecount)
             line_to_write = "[{}]\n".format(tag_node.tag)
@@ -372,6 +372,53 @@ class TemplateNode(TreeNode):
             else:
                 return None
 
+    @staticmethod
+    def _inner_loop_get_template_match(
+            ii, template_token_bag, candidate_tokens):
+        """The inner loop of the method below."""
+        good_to_go = False
+        for var in template_token_bag:
+            if ii < len(candidate_tokens) and ii >= len(var):
+                template_token_bag.remove(var)
+            elif ii >= len(var) and len(var) == len(candidate_tokens):
+                good_to_go = True
+            elif (ii >= len(candidate_tokens) and
+                  (ii >= len(var) or
+                   (ii < len(var) and '(0,' not in var[ii]))):
+                template_token_bag.remove(var)
+            elif ('&' == var[ii] or '?' == var[ii] or '$' == var[ii] or
+                  (ii < len(candidate_tokens) and
+                   var[ii] == candidate_tokens[ii])):
+                # This case is an auto-pass
+                good_to_go = True
+            else:
+                if any(c in var[ii] for c in '&?$'):
+                    varii_type = var[ii][0]
+                    varii_range = var[ii][2:var[ii].index(')')].split(',')
+                    # If len(varii_range) == 1 then we have a range of
+                    # format (x,), indicating any number of :'s
+                    if len(varii_range[1]) == 0:
+                        varii_range[1] = len(candidate_tokens) - len(var) + 1
+                    # For every possible length (the +1 is because range is
+                    # exclusive-end and my notation is inclusive-end)
+                    for jj in range(int(varii_range[0]),
+                                    int(varii_range[1]) + 1):
+                        # Make a copy of var
+                        new_var = var[:]
+                        # Remove the range item
+                        del new_var[ii]
+                        # Replace it with (one of the possible lengths)
+                        # times the multiplied symbol
+                        # If jj is 0 the range item is just removed
+                        for _ in range(0, jj):
+                            new_var.insert(ii, varii_type)
+                        # Place the new variant in the token bag for
+                        # evaluation
+                        template_token_bag.append(new_var)
+                # No counting, there is a new template_token_bag[ii]
+                template_token_bag.remove(var)
+        return ii + good_to_go, template_token_bag
+
     # This tells if a single tag matches a single tag; that is, it assumes
     # we've got one element of the |-separated list
     def get_template_match(self, tag_to_compare):
@@ -382,70 +429,29 @@ class TemplateNode(TreeNode):
         candidate_tokens = tag_to_compare.split(':')
 
         ii = 0
-        while (len(template_token_bag) > 0 and
-               (ii < len(candidate_tokens) or
-                ii < len(template_token_bag[0]))):
-            good_to_go = False
-            for var in template_token_bag:
-                if ii < len(candidate_tokens) and ii >= len(var):
-                    template_token_bag.remove(var)
-                elif ii >= len(var) and len(var) == len(candidate_tokens):
-                    good_to_go = True
-                elif (ii >= len(candidate_tokens) and
-                      (ii >= len(var) or
-                       (ii < len(var) and '(0,' not in var[ii]))):
-                    template_token_bag.remove(var)
-                elif ('&' == var[ii] or '?' == var[ii] or '$' == var[ii] or
-                      (ii < len(candidate_tokens) and
-                       var[ii] == candidate_tokens[ii])):
-                    # This case is an auto-pass
-                    good_to_go = True
-                else:
-                    if '&' in var[ii] or '?' in var[ii] or '$' in var[ii]:
-                        varii_type = var[ii][0]
-                        varii_range = var[ii][2:var[ii].index(')')].split(',')
-                        # If len(varii_range) == 1 then we have a range of
-                        # format (x,), indicating any number of :'s
-                        if len(varii_range[1]) == 0:
-                            varii_range[1] = len(candidate_tokens)-len(var) + 1
-                        # For every possible length (the +1 is because range is
-                        # exclusive-end and my notation is inclusive-end)
-                        for jj in range(int(varii_range[0]),
-                                        int(varii_range[1])+1):
-                            # Make a copy of var
-                            new_var = var[:]
-                            # Remove the range item
-                            del new_var[ii]
-                            # Replace it with (one of the possible lengths)
-                            # times the multiplied symbol
-                            # If jj is 0 the range item is just removed
-                            for _ in range(0, jj):
-                                new_var.insert(ii, varii_type)
-                            # Place the new variant in the token bag for
-                            # evaluation
-                            template_token_bag.append(new_var)
-                    # No counting, there is a new template_token_bag[ii]
-                    template_token_bag.remove(var)
-            if good_to_go:
-                ii += 1
+        while not any(not template_token_bag,
+                      ii >= len(candidate_tokens),
+                      ii >= len(template_token_bag[0])):
+            ii, template_token_bag = self._inner_loop_get_template_match(
+                ii, template_token_bag, candidate_tokens)
+
         for tag in template_token_bag:
             if len(tag) != len(candidate_tokens):
                 template_token_bag.remove(tag)  # This isn't working properly?
 
-        if len(template_token_bag) == 0:
-            return None
-        elif len(template_token_bag) == 1:
+        if not template_token_bag:
+            return
+        if len(template_token_bag) == 1:
             return template_token_bag[0]
-        else:
-            # TODO error handling for multiple template matches
-            highest_priority = TemplateNode._get_best_match(template_token_bag)
-            userlog.debug("More than one template matched.\nTag: %s Matches:",
-                          tag_to_compare)
-            for template in template_token_bag:
-                userlog.debug("\t%s", template)
-            userlog.debug("The highest-priority match is %s", highest_priority)
-            # Technically this does in fact have a matching template
-            return highest_priority
+        # TODO error handling for multiple template matches
+        highest_priority = TemplateNode._get_best_match(template_token_bag)
+        userlog.debug("More than one template matched.\nTag: %s Matches:",
+                      tag_to_compare)
+        for template in template_token_bag:
+            userlog.debug("\t%s", template)
+        userlog.debug("The highest-priority match is %s", highest_priority)
+        # Technically this does in fact have a matching template
+        return highest_priority
 
     @staticmethod
     def _get_best_match(template_tokens_bag):
